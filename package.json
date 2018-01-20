@@ -1,0 +1,19 @@
+{
+  "name": "mycard",
+  "version": "1.0.0",
+  "description": "Generates and displays web version of patron library cards.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alivesay/mycard.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/alivesay/mycard/issues"
+  },
+  "homepage": "https://github.com/alivesay/mycard#readme"
+}

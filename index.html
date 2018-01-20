@@ -1,0 +1,193 @@
+<!doctype html>
+<html>
+<head>
+<title>MCL MyCard</title>
+
+<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+<meta charset="utf-8" />
+<meta name="description" content="View your scannable MCL card." />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable", content="yes" />
+
+<link rel="stylesheet" type="text/css" href="lib/mycard.css">
+<link rel="stylesheet" type="text/css" href="lib/jquery-ui.min.css">
+
+<script type="text/javascript" src="lib/jquery.js"></script>
+<script type="text/javascript" src="lib/jquery-ui.min.js"></script>
+<script type="text/javascript" src="lib/fonts.js"></script>
+<script type="text/javascript">
+
+var Module = {
+	preRun:[ function() {
+			Module.FS_createPreloadedFile("/", "Inconsolata.otf",
+										 "fonts/Inconsolata.otf", true, false);
+	} ],
+	postRun:[ function() {
+			var load_font = Module.cwrap("load_font", 'number',
+										['string','string','number']);
+			load_font("Inconsolata.otf", "INCONSOLATA", 108);
+
+	} ]
+};
+</script>
+<script type="text/javascript" src="freetype.js"></script>
+<script type="text/javascript" src="bwipp.js"></script>
+<script type="text/javascript" src="bwipjs.js"></script>
+<script type="text/javascript" src="lib/bitmap.js"></script>
+<script type="text/javascript" src="lib/symdesc.js"></script>
+<script type="text/javascript" src="lib/canvas-toblob.js"></script>
+<script type="text/javascript" src="lib/filesaver.js"></script>
+<script type="text/javascript">
+$(document).ready(function() {
+	$('#render').button().click(render);
+	$('#newbarcode').css('display', 'none');
+
+	// Allow Enter to render
+	$('#params').keypress(function(ev) {
+		if (ev.which == 13) {
+			render();
+			ev.stopPropagation();
+			ev.preventDefault();
+			return false;
+		}
+	});
+	
+	var lastBarText = localStorage.getItem('bwipjsLastBarText');
+	if (lastBarText) {
+		$('#params').css('display', 'none');
+		$('#canvas').css('display', 'block');
+		$('#symtext').val(lastBarText);
+		setTimeout(render, 1);
+	}
+
+	$('#newbarcode').click(function () {
+		localStorage.removeItem('bwipjsLastBarText');
+		$('#params').css('display', 'inline-block');
+		$('#canvas').css('display', 'none');
+		$('#newbarcode').css('display', 'none');
+		location.reload(true);
+	});
+});
+
+function render() {
+	var elt  = symdesc['rationalizedCodabar'];
+	var text = $('#symtext').val().replace(/^\s+/,'').replace(/\s+$/,'');
+	var altx = text;
+	var text = 'A' + text + 'A';
+	var opts = 'includetext'
+	var rot  = 'N';
+
+	var monochrome = false;
+	var scaleX = 4;
+	var scaleY = 4;
+
+	localStorage.setItem('bwipjsLastBarText', text.substr(1, text.length - 2));
+
+	// Link in the freetype module and how to render fonts.
+	var bw = new BWIPJS(Module, monochrome);
+
+	// Clear the page
+	$('#output').text('');
+	$('#stats').text('');
+
+	var canvas = document.getElementById('canvas');
+	canvas.height = 1;
+	canvas.width  = 1;
+
+	// Convert the options to a dictionary object, so we can pass alttext with
+	// spaces.
+	var tmp = opts.split(' '); 
+	opts = {};
+	for (var i = 0; i < tmp.length; i++) {
+		if (!tmp[i]) {
+			continue;
+		}
+		var eq = tmp[i].indexOf('=');
+		if (eq == -1) {
+			opts[tmp[i]] = true;
+		} else {
+			opts[tmp[i].substr(0, eq)] = tmp[i].substr(eq+1);
+		}
+	}
+
+	// Add the alternate text
+	if (altx) {
+		var sep = "  ";
+		opts.alttext = altx.substr(0, 1) + sep + altx.substr(1, 4) + sep + altx.substr(5, 5) + sep + altx.substr(10, 4);
+	}
+
+	// BWIPP does not extend the background color into the
+	// human readable text.  Fix that in the bitmap interface.
+	if (opts.backgroundcolor) {
+		bw.bitmap(new Bitmap(opts.backgroundcolor));
+		delete opts.backgroundcolor;
+	} else {
+		bw.bitmap(new Bitmap);
+	}
+	
+	// Set the scaling factors
+	bw.scale(scaleX, scaleY);
+
+	// Add optional padding to the image
+	bw.bitmap().pad(+opts.paddingwidth*scaleX || 0,
+					+opts.paddingheight*scaleY || 0);
+
+	var ts0 = Date.now();
+
+	// Render the bar code
+	try {
+		// Create a new BWIPP instance for each
+		BWIPP()(bw, elt.sym, text, opts);
+	} catch (e) {
+		// Watch for BWIPP generated raiseerror's.
+		var msg = ''+e;
+		if (msg.indexOf("bwipp.") >= 0) {
+			$('#output').text(msg);
+		} else if (e.stack) {
+			$('#output').text(e.stack);
+		} else {
+			$('#output').text(e);
+		}
+		return;
+	}
+
+	var ts1 = Date.now();
+
+	bw.bitmap().show(canvas, rot);
+
+	var ts2 = Date.now();
+
+	$('#stats').text('Rendered in ' + (ts2-ts0) + ' msecs');
+	$('#params').css('display', 'none');
+	$('#canvas').css('display', 'block');
+	$('#newbarcode').css('display', 'block');
+}
+
+function saveCanvas(type, ext) {
+	var canvas = document.getElementById('canvas');
+	canvas.toBlob(function (blob) {
+					  saveAs(blob, saveCanvas.basename + ext);
+				  }, type, 1);
+}
+
+</script>
+</head>
+
+<body>
+	<div id="content" class="centerFlex">
+	<div id="params">
+		<form onsubmit="return false;">
+			<fieldset>
+				<input type="number" novalidate="novalidate" placeholder="Enter Barcode" id="symtext" type="text">
+				<button id="render">View</button>
+			</fieldset>
+		</form>
+	</div>
+		<canvas id="canvas" width=1 height=1 style="border:1px solid #fff;display:none;visibility:hidden;"></canvas>
+		<div id="proof" style="position:relative;border:1px solid #fff"></div>
+		<div id="output" style="white-space:pre"></div>
+	</div>
+	<button id="newbarcode">Enter New Barcode</button>
+</body>
+</html>
